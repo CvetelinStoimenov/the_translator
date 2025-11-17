@@ -19,6 +19,7 @@ import re
 import time
 import json
 import threading
+import tkinter as tk
 import requests
 from tkinter import (
     Tk, Button, Label, Entry, StringVar, filedialog,
@@ -387,6 +388,7 @@ class UltraTranslator:
                     return key
         return ""
 
+
     def open_api_window(self):
         """Open modal window for entering/saving the xAI API key."""
         win = Toplevel(self.root)
@@ -398,12 +400,58 @@ class UltraTranslator:
 
         Label(win, text="Enter xAI API key:", bg=win["bg"],
               fg="white" if self.dark_mode else "black").pack(pady=25)
-        entry = Entry(win, font=("Consolas", 11), width=55, show="*",
+
+        entry = Entry(win, font=("Consolas", 11), width=55, show="•",
                       bg="#2d2d2d" if self.dark_mode else "#ffffff",
                       fg="white" if self.dark_mode else "black")
         entry.pack(pady=5)
         entry.insert(0, self.api_key)
 
+        def force_paste(event=None):
+            try:
+                entry.delete("sel.first", "sel.last")
+            except:
+                pass
+            try:
+                entry.insert("insert", win.clipboard_get())
+            except:
+                pass
+            return "break"
+
+        def select_all(event=None):
+            entry.selection_range(0, "end")
+            return "break"
+
+        def copy_text(event=None):
+            try:
+                entry.event_generate("<<Copy>>")
+            except:
+                win.clipboard_clear()
+                win.clipboard_append(entry.selection_get())
+            return "break"
+
+        # Keyboard shortcuts
+        entry.bind("<Control-a>", select_all)      # Ctrl+A
+        entry.bind("<Control-c>", copy_text)       # Ctrl+C
+        entry.bind("<Control-v>", force_paste)     # Ctrl+V 
+
+        # Context menu
+        menu = tk.Menu(entry, tearoff=0)
+        menu.add_command(label="Cut",       command=lambda: entry.event_generate("<<Cut>>"))
+        menu.add_command(label="Copy",      command=lambda: entry.event_generate("<<Copy>>"))
+        menu.add_command(label="Paste",     command=force_paste)
+        menu.add_separator()
+        menu.add_command(label="Select All",command=select_all)
+
+        def popup(event):
+            try:
+                menu.tk_popup(event.x_root, event.y_root)
+            finally:
+                menu.grab_release()
+
+        entry.bind("<Button-3>", popup)
+
+        # ─────────────────── SAVE BUTTON ───────────────────
         def save():
             key = entry.get().strip()
             if key.startswith(("xai-", "xai_")):
