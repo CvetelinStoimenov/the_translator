@@ -213,7 +213,7 @@ class UltraTranslator:
     def __init__(self, root):
         self.root = root
         self.root.title("The Translator")
-        self.root.geometry("275x300")
+        self.root.geometry("300x300")
         self.root.resizable(True, True)
 
         # ------------------- Application state -------------------
