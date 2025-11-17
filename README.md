@@ -41,10 +41,10 @@ Simple yet powerful desktop tool for translating **.srt** subtitles and **.json*
 
 ```bash
 # 1. Clone & enter folder
-git clone https://github.com/CvetelinStoimenov/TheTranslator.git
+git clone https://github.com/CvetelinStoimenov/the_translator.git
 cd TheTranslator
 
-# 2. Create virtual environment (recommended)
+# 2. Create a virtual environment (recommended)
 python -m venv venv
 
 # 3. Activate it
