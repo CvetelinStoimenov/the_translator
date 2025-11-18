@@ -890,11 +890,4 @@ class UltraTranslator:
 if __name__ == "__main__":
     root = Tk()
     app = UltraTranslator(root)
-<<<<<<< HEAD
     root.mainloop()
-
-# Build .exe with PyInstaller:
-# pyinstaller --onefile --windowed --name "TheTranslator" translator.py
-=======
-    root.mainloop()
->>>>>>> 9216f45 (feat: v4.1 – now powered by Grok-4-fast + full cancel with instant partial save)
