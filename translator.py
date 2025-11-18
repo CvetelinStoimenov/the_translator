@@ -1,7 +1,7 @@
 """
-The Translator v4.0
+The Translator v4.1
 ========================
-Translates .srt subtitle files OR .json localization files using xAI Grok-3 API.
+Translates .srt subtitle files OR .json localization files using xAI Grok-4 API.
 
 Features:
 - Full-featured GUI with dark/light theme toggle
@@ -31,7 +31,7 @@ from tkinter import ttk
 # ========================================
 # CONSTANTS
 # ========================================
-MODEL = "grok-3"                              # xAI model used for translation
+MODEL = "grok-4-fast-reasoning"               # xAI model used for translation
 MAX_BATCH_SIZE = 15                           # How many lines/values are sent in one API request
 MAX_FILE_SIZE = 5 * 1024 * 1024               # 5 MB limit – prevents huge memory/API issues
 API_URL = "https://api.x.ai/v1/chat/completions"
@@ -147,19 +147,33 @@ def save_json(keys, translated_values, original_content, output_path):
 # ========================================
 # API CALL
 # ========================================
+
 def translate_batch(batch, lang, api_key, cancel_event=None):
+
     """
-    Send a batch of texts to xAI Grok-3 and return translated strings.
+
+    Send a batch of texts to xAI Grok-4 and return translated strings.
+
     
+
     Parameters:
+
         batch         – list of dicts with key "text"
+
         lang          – target language (e.g. "Bulgarian")
+
         api_key       – xAI API key
+
         cancel_event  – threading.Event() to allow graceful cancellation
+
     
+
     Returns:
+
         (translations_list, error_message) – error_message is None on success
+
     """
+
     messages = [
         {"role": "system", "content": f"Translate to {lang}. Only translation, no explanations."}
     ]
@@ -174,21 +188,19 @@ def translate_batch(batch, lang, api_key, cancel_event=None):
             timeout=30
         )
 
-        # Check for manual cancellation at several points
         if cancel_event and cancel_event.is_set():
             return None, "Canceled"
 
         # Common xAI error codes
-        if response.status_code == 401:
+        if response.status_code == 401: 
             return None, "Invalid API key!"
-        if response.status_code == 429:
+        if response.status_code == 429: 
             return None, "Rate limit!"
-        if response.status_code == 402:
+        if response.status_code == 402: 
             return None, "No credits!"
 
         response.raise_for_status()
         content = response.json()["choices"][0]["message"]["content"].strip()
-
         # Grok returns translations separated by double newlines
         translations = [t.strip() for t in content.split("\n\n") if t.strip()]
 
@@ -204,7 +216,6 @@ def translate_batch(batch, lang, api_key, cancel_event=None):
         if cancel_event and cancel_event.is_set():
             return None, "Canceled"
         return None, f"Error: {str(e)[:80]}"
-
 
 # ========================================
 # MAIN GUI CLASS
@@ -659,10 +670,6 @@ class UltraTranslator:
         """
         try:
             for idx, file_path in enumerate(self.file_paths):
-                if cancel_event.is_set():
-                    self.root.after(0, lambda: self.reset_after_cancel(None, "Queue canceled.", file_path))
-                    return
-
                 self.current_file_index = idx + 1
                 self.file_path = file_path
                 self.log(f"Processing: {os.path.basename(file_path)} ({idx+1}/{len(self.file_paths)})", "info")
@@ -687,9 +694,18 @@ class UltraTranslator:
                 self.translated_count = 0
                 self.root.after(0, lambda: self.status.config(text="0%"))
 
-                success = self.translate_single_file(file_path, cancel_event)
+                partial_data, success = self.translate_single_file(file_path, cancel_event)
+               
+                if cancel_event.is_set():
+                    self.root.after(0, lambda: self.reset_after_cancel(
+                        partial_data, "Canceled – partial saved!", file_path))
+                    return
+                
                 if not success:
                     self.log(f"Failed: {os.path.basename(file_path)}", "error")
+                    continue
+                else:
+                    self.log(f"Completed: {os.path.basename(file_path)}", "success")
 
             self.root.after(0, lambda: messagebox.showinfo("Done", "All files processed!"))
 
@@ -714,12 +730,12 @@ class UltraTranslator:
 
                 for chunk in chunks:
                     if cancel_event.is_set():
-                        return False
+                        return translated, False
 
                     result = None
                     for attempt in range(2):
                         if cancel_event.is_set():
-                            return False
+                            return translated, False
                         result, error = translate_batch(
                             [{"text": sub["text"]} for sub in chunk],
                             self.lang_var.get(),
@@ -745,23 +761,24 @@ class UltraTranslator:
                 out_path = file_path.replace(".srt", f"_translated_{self.lang_var.get()}.srt")
                 save_srt(translated, out_path)
                 self.log(f"Saved: {os.path.basename(out_path)}", "success")
+                return translated, True
 
             elif ext == ".json":
                 keys, values, original_content = parse_json_text(file_path)
                 if not values:
-                    return True
+                    return [],True
 
                 chunks = [values[i:i + MAX_BATCH_SIZE] for i in range(0, len(values), MAX_BATCH_SIZE)]
-                translated_values = []
+                translated_pairs = []
 
-                for chunk in chunks:
+                for i, chunk in enumerate(chunks):
                     if cancel_event.is_set():
-                        return False
+                        return translated_pairs, False
 
                     result = None
                     for attempt in range(2):
                         if cancel_event.is_set():
-                            return False
+                            return translated_pairs, False
                         result, error = translate_batch(
                             [{"text": v} for v in chunk],
                             self.lang_var.get(),
@@ -775,21 +792,28 @@ class UltraTranslator:
                     if result is None:
                         result = chunk
 
-                    translated_values.extend(result)
+                    start_idx = i * MAX_BATCH_SIZE
+                    for j, translated_text in enumerate(result):
+                        orig_text = chunk[j]
+                        key = keys[start_idx + j]
+                        final_text = translated_text.strip() or orig_text
+                        translated_pairs.append((key, final_text))
+
                     self.translated_count += len(chunk)
                     percent = int((self.translated_count / self.total_subs) * 100)
                     self.root.after(0, lambda p=percent: self.smooth_progress(p))
                     self.log(f"File {self.current_file_index}: {self.translated_count}/{self.total_subs}", "success")
 
                 out_path = file_path.replace(".json", f"_translated_{self.lang_var.get()}.json")
-                save_json(keys, translated_values, original_content, out_path)
+                save_json(keys, [text for _, text in translated_pairs], original_content, out_path)
                 self.log(f"Saved: {os.path.basename(out_path)}", "success")
-
-            return True
+                return translated_pairs, True
+            
+            return [], True
 
         except Exception as e:
             self.log(f"Error in file {os.path.basename(file_path)}: {e}", "error")
-            return False
+            return [], False
 
     def reset_after_cancel(self, translated_data, msg, current_file_path=None):
         """
@@ -866,7 +890,11 @@ class UltraTranslator:
 if __name__ == "__main__":
     root = Tk()
     app = UltraTranslator(root)
+<<<<<<< HEAD
     root.mainloop()
 
 # Build .exe with PyInstaller:
 # pyinstaller --onefile --windowed --name "TheTranslator" translator.py
+=======
+    root.mainloop()
+>>>>>>> 9216f45 (feat: v4.1 – now powered by Grok-4-fast + full cancel with instant partial save)
